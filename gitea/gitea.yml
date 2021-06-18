@@ -1,0 +1,115 @@
+version: "3.7"
+
+services:
+  gitea:
+    image: gitea/gitea:1.10.3
+    #image: gitea/gitea:latest
+    environment:
+      - APP_NAME=Gitea
+      - USER_UID=1000
+      - USER_GID=1000
+      - ROOT_URL=https://git.doitmicro.com
+      - SSH_DOMAIN=git.doitmicro.com
+      - SSH_PORT=2222
+      - HTTP_PORT=3000
+      - DB_TYPE=postgres
+      - DB_HOST=gitea-db:5432
+      - DB_NAME=gitea
+      - DB_USER=postgres
+      - DB_PASSWD=postgres
+    volumes:
+      - /home/d3r0/srv/gitea/data/git:/data
+    ports:
+      - "3000:3000"
+      - "2222:22"
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik_public
+        # traefikv2
+        - "traefik.http.routers.gitea.rule=Host(`git.doitmicro.com`)"
+        - "traefik.http.routers.gitea.entrypoints=https"
+        - traefik.http.routers.gitea.tls=true
+        - traefik.http.routers.gitea.tls.certresolver=main
+        - "traefik.http.services.gitea.loadbalancer.server.port=3000"
+    networks:
+      - traefik_public
+      - internal
+
+  gitea-db:
+    image: postgres:alpine
+    volumes:
+      - /home/d3r0/srv/gitea/data/db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=gitea
+    networks:
+      - internal
+
+  drone-server:
+    image: drone/drone:1.2.1
+    #image: ruanbekker/drone-server:basic-auth-1.2.1
+    ports:
+      - 8000:8000
+      - 9000
+    volumes:
+      - /home/d3r0/srv/gitea/data/drone:/var/lib/drone/
+    depends_on:
+      - gitea
+    environment:
+      - DRONE_OPEN=true
+      - DRONE_GITEA=true
+      - DRONE_NETWORK=git_internal
+      - DRONE_DEBUG=true
+      - DRONE_ADMIN=d3r0
+      - DRONE_USER_CREATE=username:d3r0,admin:true
+      - DRONE_SERVER_PORT=:8000
+      - DRONE_DATABASE_DRIVER=postgres
+      - DRONE_DATABASE_DATASOURCE=postgres://postgres:postgres@gitea-db:5432/postgres?sslmode=disable
+      - DRONE_GIT_ALWAYS_AUTH=false
+      - DRONE_GITEA_SERVER=https://git.doitmicro.com
+      - DRONE_RPC_SECRET=9c3921e3e748aff725d2e16ef31fbc42
+      - DRONE_SERVER_HOST=drone.doitmicro.com
+      - DRONE_HOST=https://drone.doitmicro.com
+      - DRONE_SERVER_PROTO=https
+      - DRONE_TLS_AUTOCERT=false
+      - DRONE_AGENTS_ENABLED=true
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik_public
+        # traefikv2
+        - "traefik.http.routers.drone.rule=Host(`drone.doitmicro.com`)"
+        - "traefik.http.routers.drone.entrypoints=https"
+        - "traefik.http.services.drone.loadbalancer.server.port=8000"
+    networks:
+      - traefik_public
+      - internal
+
+  drone-agent:
+    image: drone/agent:1.2.1
+    #image: ruanbekker/drone-agent:basic-auth-1.2.1
+    command: agent
+    depends_on:
+      - drone-server
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /home/d3r0/srv/gitea/data/drone-agent:/data
+    environment:
+      - DRONE_RPC_SERVER=https://drone.doitmicro.com
+      - DRONE_RPC_SECRET=9c3921e3e748aff725d2e16ef31fbc42
+      - DRONE_RUNNER_CAPACITY=1
+      - DRONE_RUNNER_NETWORKS=git_internal
+    networks:
+      - internal
+
+networks:
+  traefik_public:
+    external: true
+  internal:
+    driver: overlay
+    attachable: true
+    ipam:
+      config:
+        - subnet: 172.16.201.0/24

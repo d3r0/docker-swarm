@@ -1,0 +1,55 @@
+version: '3.7'
+
+services:
+  shipment:
+    image:  thedevilisdero/shipment-svc:latest
+    ports:
+      - 3333:3333
+    volumes:
+      - /home/d3r0/srv/shipment/data/code:/usr/src/app
+    depends_on:
+      - redis
+      - postgres
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik_public
+        # traefikv2
+        - "traefik.http.routers.shipment.rule=Host(`shipment.doitmicro.com`)"
+        - "traefik.http.routers.shipment.entrypoints=https"
+        - traefik.http.routers.shipment.tls=true
+        - traefik.http.routers.shipment.tls.certresolver=main
+        - "traefik.http.services.shipment.loadbalancer.server.port=3333"
+    networks:
+      - traefik_public
+      - internal
+  redis:
+    image: redis:5
+    ports:
+      - 6379:6379
+    networks:
+      - internal
+  postgres:
+    image: postgres:12
+    networks:
+      - internal
+    environment:
+      POSTGRES_PASSWORD: postgresql
+      POSTGRES_USER: postgresql
+      POSTGRES_DB: shipment_svc
+      PG_DATA: /var/lib/postgresql/data
+    ports:
+      - 5432:5432
+    volumes:
+      - /home/d3r0/srv/shipment/data/pgdata:/var/lib/postgresql/data
+networks:
+  traefik_public:
+    external: true
+  internal:
+    driver: overlay
+    attachable: true
+    ipam:
+      config:
+        - subnet: 172.16.203.0/24
+volumes:
+  pgdata:

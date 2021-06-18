@@ -1,0 +1,50 @@
+version: '3'
+services:
+  database:
+    image: postgres:9.6-alpine
+    environment:
+      - POSTGRES_USER=hedgedoc
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=hedgedoc
+    volumes:
+      - /home/d3r0/srv/hedgedoc/data/database:/var/lib/postgresql/data
+    networks:
+      - internal
+  app:
+    # Make sure to use the latest release from https://hedgedoc.org/latest-release
+    image: quay.io/hedgedoc/hedgedoc:1.8.1
+    environment:
+      - CMD_DB_URL=postgres://hedgedoc:password@database:5432/hedgedoc
+      - CMD_DOMAIN=doc.doitmicro.com
+      - CMD_PORT=3002
+      - CMD_URL_ADDPORT=false
+      - CMD_PROTOCOL_USESSL=true
+      - CMD_CSP_ENABLE=false
+    volumes:
+      - /home/d3r0/srv/hedgedoc/data/uploads:/hedgedoc/public/uploads
+    ports:
+      - "3002:3002"
+    depends_on:
+      - database
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik_public
+        # traefikv2
+        - "traefik.http.routers.doc.rule=Host(`doc.doitmicro.com`)"
+        - "traefik.http.routers.doc.entrypoints=https"
+        - traefik.http.routers.doc.tls=true
+        - traefik.http.routers.doc.tls.certresolver=main
+        - "traefik.http.services.doc.loadbalancer.server.port=3002"
+    networks:
+      - traefik_public
+      - internal
+      
+networks:
+  traefik_public:
+    external: true
+  internal:
+    driver: overlay
+    ipam:
+      config:
+        - subnet: 172.16.202.0/24

@@ -1,0 +1,28 @@
+version: '3'
+services:
+  app:
+    image: verdaccio/verdaccio:5
+    environment:
+      - VERDACCIO_PORT=4873
+    volumes:
+      - /home/d3r0/srv/config/npm/:/verdaccio/conf
+      - /home/d3r0/srv/npm/data/storage:/verdaccio/storage
+      - /home/d3r0/srv/npm/data/plugins:/verdaccio/plugins
+    ports:
+      - "4873:4873"
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.docker.network=traefik_public
+        # traefikv2
+        - "traefik.http.routers.npm.rule=Host(`npm.mhub.icu`)"
+        - "traefik.http.routers.npm.entrypoints=https"
+        - traefik.http.routers.npm.tls=true
+        - traefik.http.routers.npm.tls.certresolver=main
+        - "traefik.http.services.npm.loadbalancer.server.port=4873"
+    networks:
+      - traefik_public
+      
+networks:
+  traefik_public:
+    external: true
